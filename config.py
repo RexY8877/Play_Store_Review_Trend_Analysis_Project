@@ -18,26 +18,13 @@ class Config:
     
     # Topic settings
     SEED_TOPICS = [
-        "Delivery issue",
-        "Food stale",
-        "Delivery partner rude",
-        "App crashing",
-        "Payment issue",
-        "Order cancellation",
-        "Refund problem",
-        "Food quality poor",
-        "Wrong order delivered",
-        "Long delivery time",
-        "Customer support unresponsive",
-        "Order tracking not accurate",
-        "Food packaging damaged",
-        "Missing items in order",
-        "Coupon not working",
-        "App login problem",
-        "Too many notifications",
-        "Delivery charges high",
-        "Restaurant not available"
+        
+        "App crashing", "Slow performance", "Login issue", 
+        "Battery drain", "User interface", "Account hacked",
+        "Payment failure", "Update bug", "Notification issue",
+        "Customer support", "Feature request", "Ads annoying"
     ]
+    
     
     # Output settings
     OUTPUT_DIR = "./output"

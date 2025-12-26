@@ -1,65 +1,86 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
+from google_play_scraper import app, reviews, Sort
 from trend_orchestrator import TrendAnalysisOrchestrator
-from mock_data import MockDataGenerator
 from config import Config
 
-# App Header
-st.set_page_config(page_title="Review Trend Analyzer", layout="wide")
-st.title("📊 Play Store Review Trend Analysis")
-st.markdown("---")
+# --- UI Setup ---
+st.set_page_config(page_title="App Insights Pro", layout="wide")
+st.markdown("""
+    <style>
+    .main { background-color: #0e1117; color: white; }
+    stMetric { background-color: #1f2937; border-radius: 10px; padding: 15px; }
+    </style>
+    """, unsafe_allow_index=True)
 
-# Sidebar Configuration
-st.sidebar.header("Settings")
-app_id = st.sidebar.text_input("App ID", value=Config.APP_ID)
-days = st.sidebar.slider("Analysis Period (Days)", 7, 30, 14)
+st.title("🛡️ Universal Play Store Trend Analyzer")
 
-# Analysis Trigger
-if st.sidebar.button("Run Live Analysis"):
-    with st.spinner("🔄 Generating data and analyzing trends..."):
-        # 1. Initialize your components
-        orchestrator = TrendAnalysisOrchestrator()
-        data_generator = MockDataGenerator()
-        
-        target_date = datetime.now()
-        start_date = target_date - timedelta(days=days)
-        
-        # 2. Process reviews day-by-day (matching your assignment logic)
-        current_date = start_date
-        while current_date <= target_date:
-            reviews = data_generator.generate_daily_reviews(current_date, 50)
-            orchestrator.process_daily_batch(reviews, current_date)
-            current_date += timedelta(days=1)
-        
-        # 3. Generate the final report
-        report = orchestrator.generate_trend_report(target_date)
-        
-        if report is not None and not report.empty:
-            st.success("Analysis Complete!")
+# --- Sidebar Inputs ---
+with st.sidebar:
+    st.header("🔍 Analysis Target")
+    target_app_id = st.text_input("Enter Play Store ID (e.g., com.whatsapp)", value="in.swiggy.android")
+    lookback = st.slider("Days to Analyze", 7, 30, 14)
+    run_btn = st.button("Start Live Analysis", use_container_width=True)
+
+if run_btn:
+    try:
+        # 1. Fetch App Metadata (Makes it look pro!)
+        info = app(target_app_id)
+        col1, col2 = st.columns([1, 4])
+        with col1:
+            st.image(info['icon'], width=100)
+        with col2:
+            st.subheader(info['title'])
+            st.write(f"⭐ {info['score']:.1f} | 🏢 {info['developer']}")
+
+        # 2. Live Scraping
+        with st.spinner(f"Scraping real reviews for {info['title']}..."):
+            # We fetch more than we need to ensure we cover the date range
+            result, _ = reviews(
+                target_app_id,
+                lang='en',
+                country='in',
+                sort=Sort.NEWEST,
+                count=500 
+            )
             
-            # 4. Main Metrics (Corrected Logic)
-            col1, col2 = st.columns(2)
+            # Convert to DataFrame and fix dates
+            df_real = pd.DataFrame(result)
+            df_real['at'] = pd.to_datetime(df_real['at'])
             
-            # In your code, topics are the Index. We sum across columns (dates)
-            total_mentions_per_topic = report.sum(axis=1)
-            top_issue = total_mentions_per_topic.idxmax() # Finds topic with highest sum
-            total_mentions = total_mentions_per_topic.sum()
+            # Filter for the selected lookback period
+            cutoff_date = datetime.now() - timedelta(days=lookback)
+            df_filtered = df_real[df_real['at'] >= cutoff_date]
 
-            col1.metric("Top Issue Tracked", top_issue)
-            col2.metric("Total Mentions Found", int(total_mentions))
-
-            # 5. The Graph (Aesthetic Blue Trendline)
-            st.subheader("📈 Issue Frequency Over Time")
-            # We transpose (.T) so Dates are on the bottom and Topics are in the legend
-            st.line_chart(report.T)
-
-            # 6. Detailed Data Table
-            st.subheader("📝 Detailed Data Breakdown")
-            st.dataframe(report, use_container_width=True)
+            # 3. Analyze using your existing Orchestrator logic
+            orchestrator = TrendAnalysisOrchestrator()
             
-            # 7. Download Option
-            csv = report.to_csv().encode('utf-8')
-            st.download_button("Download Full Report (CSV)", csv, "trend_report.csv", "text/csv")
-        else:
-            st.error("No data found to generate a report.")
+            # Map real reviews to your orchestrator's expected format
+            for _, row in df_filtered.iterrows():
+                review_obj = {
+                    'content': row['content'],
+                    'score': row['score'],
+                    'at': row['at']
+                }
+                orchestrator.process_daily_batch([review_obj], row['at'])
+
+            report = orchestrator.generate_trend_report(datetime.now())
+
+            # 4. Visualization (Aesthetic Blue)
+            if not report.empty:
+                st.markdown("---")
+                m1, m2 = st.columns(2)
+                m1.metric("Volume Analyzed", len(df_filtered))
+                m2.metric("Top Trending Issue", report.sum(axis=1).idxmax())
+
+                st.subheader("📈 Trend Visualization")
+                st.line_chart(report.T) # Beautiful blue lines
+
+                st.subheader("📂 Raw Analysis Table")
+                st.dataframe(report.style.highlight_max(axis=0, color='#1f2937'))
+            else:
+                st.warning("No trend patterns found in recent reviews.")
+
+    except Exception as e:
+        st.error(f"Error fetching data: {e}. Please check the App ID.")
