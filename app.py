@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
 from trend_orchestrator import TrendAnalysisOrchestrator
+from mock_data import MockDataGenerator
 from config import Config
 
 # App Header
@@ -16,32 +17,49 @@ days = st.sidebar.slider("Analysis Period (Days)", 7, 30, 14)
 
 # Analysis Trigger
 if st.sidebar.button("Run Live Analysis"):
-    with st.spinner("🔄 Fetching and analyzing reviews..."):
+    with st.spinner("🔄 Generating data and analyzing trends..."):
+        # 1. Initialize your components
         orchestrator = TrendAnalysisOrchestrator()
-        target_date = datetime.now()
+        data_generator = MockDataGenerator()
         
-        # We simulate the batch process using your existing logic
+        target_date = datetime.now()
+        start_date = target_date - timedelta(days=days)
+        
+        # 2. Process reviews day-by-day (matching your assignment logic)
+        current_date = start_date
+        while current_date <= target_date:
+            reviews = data_generator.generate_daily_reviews(current_date, 50)
+            orchestrator.process_daily_batch(reviews, current_date)
+            current_date += timedelta(days=1)
+        
+        # 3. Generate the final report
         report = orchestrator.generate_trend_report(target_date)
         
         if report is not None and not report.empty:
-            # 1. Main Metrics
+            st.success("Analysis Complete!")
+            
+            # 4. Main Metrics (Corrected Logic)
             col1, col2 = st.columns(2)
-            top_issue = report.groupby('topic')['frequency'].sum().idxmax()
-            col1.metric("Top Issue", top_issue)
-            col2.metric("Total Reviews Processed", report['frequency'].sum())
+            
+            # In your code, topics are the Index. We sum across columns (dates)
+            total_mentions_per_topic = report.sum(axis=1)
+            top_issue = total_mentions_per_topic.idxmax() # Finds topic with highest sum
+            total_mentions = total_mentions_per_topic.sum()
 
-            # 2. The Graph (Aesthetic Blue Trendline)
+            col1.metric("Top Issue Tracked", top_issue)
+            col2.metric("Total Mentions Found", int(total_mentions))
+
+            # 5. The Graph (Aesthetic Blue Trendline)
             st.subheader("📈 Issue Frequency Over Time")
-            # Pivot data for the chart
-            chart_data = report.pivot(index='date', columns='topic', values='frequency').fillna(0)
-            st.line_chart(chart_data)
+            # We transpose (.T) so Dates are on the bottom and Topics are in the legend
+            st.line_chart(report.T)
 
-            # 3. Data Table
-            st.subheader("📝 Detailed Breakdown")
+            # 6. Detailed Data Table
+            st.subheader("📝 Detailed Data Breakdown")
             st.dataframe(report, use_container_width=True)
             
-            # 4. Download Option
-            csv = report.to_csv(index=False).encode('utf-8')
-            st.download_button("Download Report (CSV)", csv, "trend_report.csv", "text/csv")
+            # 7. Download Option
+            csv = report.to_csv().encode('utf-8')
+            st.download_button("Download Full Report (CSV)", csv, "trend_report.csv", "text/csv")
         else:
             st.error("No data found to generate a report.")
